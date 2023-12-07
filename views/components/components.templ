@@ -1,0 +1,878 @@
+package components
+
+import (
+	"NourishNestApp/db"
+	"strconv"
+
+	"os"
+	"fmt"
+	"time"
+	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+)
+
+func cacheBuster(path string) string {
+	cacheVersion := os.Getenv("ASSETS_VERSION")
+	return path + "?v=" + cacheVersion
+}
+
+func shortDur(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = s[:len(s)-2]
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = s[:len(s)-2]
+	}
+	return s
+}
+
+templ baseLayout(name string) {
+	<html data-theme="dark">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<link rel="apple-touch-icon" sizes="180x180" href="/public/apple-touch-icon.png"/>
+			<link rel="icon" type="image/png" sizes="32x32" href="/public/favicon-32x32.png"/>
+			<link rel="icon" type="image/png" sizes="16x16" href="/public/favicon-16x16.png"/>
+			<link rel="manifest" href="/public/manifest.json" crossorigin="use-credentials"/>
+			<title>
+				if len(name) > 0 {
+					Nourish Nest - { name }
+				} else {
+					Nourish Nest
+				}
+			</title>
+			<script src="https://unpkg.com/htmx.org@1.9.9" integrity="sha384-QFjmbokDn2DjBjq+fM+8LUIVrAgqcNW2s0PjAxHETgRn9l4fvX31ZxDxvwQnyMOX" crossorigin="anonymous"></script>
+			<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+			<link href={ cacheBuster("/public/styles.css") } rel="stylesheet" type="text/css"/>
+		</head>
+		<body class="flex flex-col gap-y-4 min-h-full">
+			@navBar()
+			{ children... }
+			<script>
+      htmx.on("htmx:load", (e) => {
+        // If HTMX addes a dialog element, open it as a modal
+        if (e.detail.elt.tagName === "DIALOG") {
+          e.detail.elt.showModal()
+        }
+      })
+      </script>
+		</body>
+	</html>
+}
+
+templ Layout(name string) {
+	@baseLayout(name) {
+		<main class="flex-1">
+			{ children... }
+		</main>
+	}
+}
+
+templ LayoutWithClock(name string) {
+	@baseLayout(name) {
+		@currentTime()
+		<main class="flex-1">
+			{ children... }
+		</main>
+	}
+}
+
+templ navBar() {
+	<header class="navbar bg-base-300">
+		<div class="flex-1">
+			<a class="hidden sm:inline-flex btn btn-ghost text-xl" href="/">Nourish Nest</a>
+		</div>
+		<nav class="flex-none">
+			<div class="dropdown dropdown-end">
+				<div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+				</div>
+				<ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+					<li>
+						<a class="bg-primary btn-primary" href="/entry">New Entry</a>
+					</li>
+					<li>
+						<a href="/daily">Daily Summaries</a>
+					</li>
+					<li>
+						<a href="/entry/all">View all entries</a>
+					</li>
+					<li>
+						<a href="/logout/google">Log out</a>
+					</li>
+				</ul>
+			</div>
+		</nav>
+	</header>
+}
+
+func dirtyNappyStateText(nappyStateDirty int) string {
+	switch nappyStateDirty {
+	case 1:
+		return "Streaked"
+	case 2:
+		return "Stained"
+	case 3:
+		return "Regular"
+	case 4:
+		return "Heavy"
+	case 5:
+		return "Poonami"
+	default:
+		return ""
+	}
+}
+
+templ AddNewEntryCard(nextSession *time.Time) {
+	<div class="max-w-screen-sm w-full">
+		if nextSession != nil {
+			<div class="pb-4 text-lg">
+				Next expected session
+				if nextSession.After(time.Now()) {
+					is 
+				} else {
+					was 
+				}
+				at <time datetime={ nextSession.Format(time.RFC3339) } class="text-emerald-400 whitespace-nowrap">{ nextSession.Format("02/01 @ 3:04PM") }</time>
+			</div>
+		}
+		<a href="/entry" class="btn btn-secondary w-full">
+			Add a new entry
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"></path>
+			</svg>
+		</a>
+	</div>
+}
+
+templ EntryCard(entry db.Entry) {
+	<div class="card max-w-screen-sm w-full bg-neutral text-neutral-content shadow-md">
+		<div class="card-body p-4 md:p-8">
+			<div class="grid" style="grid-template-columns: 1fr auto">
+				<div class="flex flex-col gap-2">
+					<strong class="card-title text-lg text-primary flex flex-col md:flex-row items-start justify-start">
+						<span class="text-xl">
+							{ entry.CreatedAt.Format("3:04pm") }
+						</span>
+						<span class="hidden md:inline">&nbsp;-&nbsp;</span>
+						<span class="text-indigo-500">
+							{ entry.CreatedAt.Format("Monday 02/01/2006") }
+						</span>
+					</strong>
+				</div>
+				<div class="dropdown dropdown-bottom dropdown-end">
+					<div tabindex="0" role="button" class="btn btn-circle">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"></path>
+						</svg>
+					</div>
+					<ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+						<li>
+							<a href={ templ.URL("/entry/" + entry.Id + "/feed") }>
+								Add feed to entry
+							</a>
+						</li>
+						<li>
+							<a
+ 								hx-get={ "/entry/" + entry.Id + "/edit" }
+ 								hx-target="body"
+ 								hx-swap="beforeend"
+							>
+								Edit entry
+							</a>
+						</li>
+						<li>
+							<a
+ 								hx-delete={ "/entry/" + entry.Id }
+ 								hx-target={ "#entry-" + entry.Id }
+ 								hx-confirm="Are you sure you want to delete this entry?"
+ 								hx-swap="outerHTML"
+							>
+								Delete entry
+							</a>
+						</li>
+					</ul>
+				</div>
+			</div>
+			<div class="flex flex-col gap-y-4">
+				<section class="entry-details">
+					<dl class="inline-grid grid-cols-1 md:grid-cols-2 gap-x-2">
+						<dt>Nappy changed:</dt>
+						<dd class="text-emerald-400 pb-4 md:pb-0">
+							if entry.NappyStateDirty > 0 && entry.NappyStateWet {
+								Yes - Dirty ({ dirtyNappyStateText(entry.NappyStateDirty) }) & Wet
+							} else if entry.NappyStateDirty > 0 {
+								Yes - Dirty ({ dirtyNappyStateText(entry.NappyStateDirty) })
+							} else if entry.NappyStateWet {
+								Yes - Wet
+							} else {
+								<span class="text-fuchsia-400">No</span>
+							}
+						</dd>
+						if len(entry.Notes) > 0 {
+							<dt>Notes:</dt>
+							<dl>{ entry.Notes }</dl>
+						}
+					</dl>
+				</section>
+				<section class="feed-list" id={ "entry-" + entry.Id + "-feeds" }>
+					@FeedCardsList(entry)
+				</section>
+			</div>
+		</div>
+	</div>
+}
+
+templ feedTimeSummary(entry *db.Entry) {
+	<small class="text-md pl-2">
+		{ entry.FirstFeedStartTime.Format("3:04pm") }
+		if entry.FirstFeedStartTime != entry.LastFeedEndTime {
+			- { entry.LastFeedEndTime.Format("3:04pm") }
+		}
+		if entry.TotalFeedDuration > 0 {
+			({ shortDur(entry.TotalFeedDuration) })
+		}
+	</small>
+}
+
+templ FeedCardsList(entry db.Entry) {
+	if len(entry.Feeds) > 0 {
+		<div class="bg-base-200 rounded-md p-4">
+			<table class="border-collapse w-full">
+				<caption class="text-left border-b border-gray-300 mb-4">
+					<div class="text-lg font-bold inline">
+						{ strconv.Itoa(len(entry.Feeds)) }
+						if len(entry.Feeds) > 1 {
+							Feeds
+						}
+						if len(entry.Feeds) == 1 {
+							Feed
+						}
+					</div>
+					@feedTimeSummary(&entry)
+				</caption>
+				<thead class="hidden md:block border-gray-500 w-full">
+					<tr class="grid grid-cols-6 justify-items-start">
+						<th>Side</th>
+						<th>Duration</th>
+						<th>Started at</th>
+						<th>Finished at</th>
+						<th class="col-span-2 w-full"></th>
+					</tr>
+				</thead>
+				<tbody>
+					for index, feed := range entry.Feeds {
+						<tr id={ "feed-" + strconv.Itoa(feed.Id) } class="grid md:grid-cols-6 sm:grid-cols-2 grid-cols-1 items-center mb-4 md:mb-0 border-b border-gray-500 md:border-0 w-full">
+							@FeedCard(entry, feed, index)
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+templ FeedCard(entry db.Entry, feed db.Feed, index int) {
+	<th class="md:hidden text-left">
+		Side:
+	</th>
+	<td class="pb-2 md:pb-0">
+		{ cases.Title(language.Und, cases.NoLower).String(feed.Side) }
+	</td>
+	<th class="md:hidden text-left">Duration:</th>
+	<td class="pb-2 md:pb-0">
+		{ shortDur(feed.Duration) }
+	</td>
+	<th class="md:hidden text-left">Started at:</th>
+	<td
+ 		class="pb-2 md:pb-0"
+ 		if index == len(entry.Feeds) - 1 {
+			class="font-bold"
+		}
+	>
+		{ feed.StartTime.Format("3:04pm") }
+	</td>
+	<th class="md:hidden text-left">Finished at:</th>
+	<td
+ 		class="pb-2 md:pb-0"
+ 		if index == 0 {
+			class="font-bold"
+		}
+	>
+		{ feed.EndTime.Format("3:04pm") }
+	</td>
+	<td class="md:col-span-2 w-full flex md:items-end md:justify-end">
+		<button
+ 			type="button"
+ 			class="btn btn-circle"
+ 			hx-get={ "/entry/" + entry.Id + "/feed/" + strconv.Itoa(feed.Id) + "/edit" }
+ 			hx-target="body"
+ 			hx-swap="beforeend"
+ 			title={ "Edit feed " + strconv.Itoa(feed.Id) }
+		>
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path>
+			</svg>
+		</button>
+		<button
+ 			type="button"
+ 			class="btn btn-circle"
+ 			title={ "Delete feed " + strconv.Itoa(feed.Id) }
+ 			hx-delete={ "/entry/" + entry.Id + "/feed/" + strconv.Itoa(feed.Id) }
+ 			hx-confirm="Are you sure you want to delete this feed?"
+ 			hx-target={ "#entry-" + entry.Id + "-feeds" }
+ 			hx-swap="innerHTML"
+		>
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"></path>
+			</svg>
+		</button>
+	</td>
+}
+
+templ EntriesPagination(entries []db.Entry, nextPage int) {
+	for i, entry := range entries {
+		<li
+ 			class="w-full flex items-center justify-center"
+ 			id={ "entry-" + entry.Id }
+ 			if i == len(entries) - 1 {
+				hx-get={ "/entry/all?p=" + strconv.Itoa(nextPage) }
+				hx-select="#entries > li"
+				hx-trigger="revealed"
+				hx-swap="afterend"
+			}
+		>
+			@EntryCard(entry)
+		</li>
+	}
+}
+
+script timerScript(feed *db.Feed) {
+  function padTime(time, length) {
+    return String(time).padStart(length, "0");
+  }
+
+  function getTime(time) {
+    return padTime(time.getHours(), 2) + ":" + padTime(time.getMinutes(), 2);
+  }
+
+  function getCurrentTime() {
+      const now = new Date()
+      return getTime(now)
+  }
+
+  function timerComponent() {
+    return {
+      init() {
+          this.$data.hiddenAt = undefined;
+          for (const key of ['timeStarted', 'timeStopped', 'dateStarted', 'seconds']) {
+            this.$watch(key, (value) => {
+              localStorage.setItem(key, value)
+            })
+          }
+
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden") {
+              this.$data.hiddenAt = new Date()
+              clearInterval(this.$data.intervalId);
+            } else {
+              if (this.$data.hiddenAt === undefined || this.running === false) {
+                return
+              };
+              const now = new Date()
+              const hiddenDurationMs = now.getTime() - this.$data.hiddenAt.getTime() 
+              this.addMilliseconds(hiddenDurationMs)
+              this.$data.intervalId = setInterval(() => this.addMilliseconds(10), 10);
+            }
+          });
+      },
+      componentLoadedAt: `You loaded this page at ${getTime(new Date())}`,
+      dateStarted: feed ? new Date(feed.StartTime) : localStorage.getItem('dateStarted'),
+      timeStarted: feed ? getTime(new Date(feed.StartTime)) : localStorage.getItem('timeStarted'),
+      timeStopped: feed ? getTime(new Date(feed.EndTime)) : localStorage.getItem('timeStopped'),
+      seconds: Number.parseInt(localStorage.getItem('seconds')) || 0,
+      millis: 0,
+      intervalId: 0,
+      running: false,
+      addMilliseconds(milliseconds) {
+        this.millis += milliseconds;
+        this.seconds += Math.floor(this.millis / 1000);
+        this.millis %= 1000;
+      },
+      get millisecondsDisplay() {
+        return padTime(this.millis % 1000, 2).slice(0, 2);
+      },
+      get hoursDisplay() {
+        const hours = Math.floor(this.seconds / (60 * 60));
+        if (hours === 0) {
+            return ""
+        }
+        return padTime(hours, 2);
+      },
+      get minutesDisplay() {
+        return padTime(Math.floor(this.seconds / 60) % 60, 2);
+      },
+      get secondsDisplay() {
+        return padTime(this.seconds % 60, 2);
+      },
+      startTimer() {
+        this.dateStarted = this.dateStarted || new Date();
+        this.timeStarted = this.timeStarted || getCurrentTime()
+        this.intervalId = setInterval(() => this.addMilliseconds(10), 10);
+        this.running = true;
+      },
+      stopTimer() {
+        clearInterval(this.intervalId);
+        this.running = false;
+        this.timeStopped = getCurrentTime()
+      },
+      resetTimer() {
+        this.millis = 0;
+        this.seconds = 0;
+      },
+    }
+  }
+
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('timerComponent', timerComponent)
+  })
+}
+
+templ Timer(feed *db.Feed, disableJS bool) {
+	<div
+ 		class="flex flex-col gap-4"
+ 		if disableJS == false {
+			x-data="timerComponent()"
+		}
+	>
+		if disableJS == false {
+			<div
+ 				class="grid justify-center grid-rows-2 gap-4"
+			>
+				<div class="tabular-nums flex justify-center text-5xl">
+					<template x-if="hoursDisplay.length > 0">
+						<span x-text="hoursDisplay" class="text-gray-100">00</span>
+					</template>
+					<template x-if="hoursDisplay.length > 0">
+						<span>:</span>
+					</template>
+					<span x-text="minutesDisplay" class="text-gray-100">00</span>
+					<span>:</span>
+					<span x-text="secondsDisplay" class="text-gray-100">00</span>
+					<span>:</span>
+					<span x-text="millisecondsDisplay" class="text-gray-100">00</span>
+				</div>
+				<div style="grid-template-columns: 2fr 2fr 1fr" class="grid gap-4">
+					<button type="button" @click="startTimer()" :disabled="running" class="btn btn-success">
+						Start
+					</button>
+					<button type="button" @click="stopTimer()" :disabled="!running" class="btn btn-primary">
+						Stop
+					</button>
+					<template x-if="timeStarted !== undefined || timeStopped !== undefined && seconds === 0 && millis === 0">
+						<button type="button" @click="resetTimer()" :disabled="running" class="btn btn-secondary">
+							Clear times
+						</button>
+					</template>
+					<template x-if="timeStarted === undefined || timeStopped === undefined">
+						<button type="button" @click="resetTimer()" :disabled="running || millis === 0" class="btn btn-secondary">
+							Reset
+						</button>
+					</template>
+				</div>
+			</div>
+		}
+		<div class="flex justify-center">
+			<div class="inline-grid grid-cols-2 gap-x-2 justify-center text-xl">
+				<div class="col-span-2 h-full text-sm text-gray-200 text-center" x-text="componentLoadedAt"></div>
+				<div>
+					<label class="block" for="timeStarted">Started at:</label>
+					<input
+ 						name="timeStarted"
+ 						class="text-emerald-400"
+ 						type="time"
+ 						if feed != nil && disableJS {
+							value={ feed.StartTime.Format("15:04") }
+						} else {
+							x-model="timeStarted"
+						}
+ 						required
+					/>
+				</div>
+				<div>
+					<label class="block" for="timeStopped">Stopped at:</label>
+					<input
+ 						name="timeStopped"
+ 						class="text-fuchsia-400 w-full"
+ 						type="time"
+ 						required
+ 						if feed != nil && disableJS {
+							value={ feed.EndTime.Format("15:04") }
+						} else {
+							x-model="timeStopped"
+						}
+					/>
+				</div>
+			</div>
+			if disableJS == false {
+				<input type="hidden" :value="dateStarted ? dateStarted.valueOf() : undefined" name="dateStarted"/>
+			}
+		</div>
+	</div>
+	if disableJS == false {
+		@timerScript(feed)
+	}
+}
+
+templ currentTime() {
+	<div class="flex justify-center">
+		<div x-data="currentTimeComponent()" x-init="init()" class="stat place-items-center">
+			<div class="stat-title">It is currently</div>
+			<div class="stat-value" x-text="getTime()"></div>
+			<div class="stat-desc" x-text="getDate()"></div>
+		</div>
+	</div>
+	<script>
+  function currentTimeComponent() {
+        return {
+            time: new Date(),
+            init() {
+              setInterval(() => {
+                this.time = new Date();
+              }, 1000);
+            },
+            getTime() {
+                return this.time.toLocaleTimeString("en-GB");
+            },
+            getDate() {
+                return this.time.toLocaleDateString("en-GB");
+            },
+        }
+    }
+  </script>
+}
+
+templ SideFieldset(lastLoggedSide string, sideValue string) {
+	<fieldset class="grid grid-rows-2 items-center justify-center text-center">
+		<legend class="mb-2">
+			if len(lastLoggedSide) > 0 {
+				<small class="text-sm text-primary">Last side: <span>{ cases.Title(language.Und, cases.NoLower).String(lastLoggedSide) }</span></small>
+				<br/>
+			}
+			if sideValue == "" {
+				Which side are we doing?
+			} else {
+				Which side was done?
+			}
+		</legend>
+		<div class="join justify-center">
+			if lastLoggedSide == "right" || sideValue == "left" {
+				<input class="join-item btn px-10" required type="radio" name="side" value="left" aria-label="Left" checked/>
+			} else {
+				<input class="join-item btn px-10" required type="radio" name="side" value="left" aria-label="Left"/>
+			}
+			if lastLoggedSide == "left" || sideValue == "right" {
+				<input class="join-item btn px-10" required type="radio" name="side" value="right" aria-label="Right" checked/>
+			} else {
+				<input class="join-item btn px-10" required type="radio" name="side" value="right" aria-label="Right"/>
+			}
+		</div>
+	</fieldset>
+}
+
+func nappyData(entry *db.Entry) string {
+	var selectedNappyStates string
+
+	if entry == nil {
+		return "{ selectedNappyStates: [], nappyStates: ['wet', 'dirty'], nappyChanged: false }"
+	}
+
+	if entry.NappyStateWet {
+		selectedNappyStates = "wet"
+	}
+
+	if entry.NappyStateDirty > 0 {
+		if selectedNappyStates == "" {
+			selectedNappyStates = "dirty"
+		} else {
+			selectedNappyStates += `','dirty`
+		}
+	}
+
+	// Creating the final string
+	result := fmt.Sprintf("{ selectedNappyStates: ['%s'], nappyStates: ['wet', 'dirty'], nappyChanged: %t }", selectedNappyStates, len(selectedNappyStates) > 0)
+	return result
+}
+
+templ NappyFieldsets(entry *db.Entry) {
+	<div
+ 		x-data={ nappyData(entry) }
+ 		class="max-w-screen-sm flex flex-col gap-4"
+	>
+		<div class="form-control">
+			<label class="label cursor-pointer justify-start gap-4">
+				<span class="label-text text-lg">Nappy changed?</span>
+				<input
+ 					type="checkbox"
+ 					class="toggle"
+ 					x-model="nappyChanged"
+ 					if entry != nil {
+						checked?={ entry.NappyStateWet || entry.NappyStateDirty > 0 }
+					}
+				/>
+			</label>
+		</div>
+		<template x-if="nappyChanged">
+			<fieldset class="form-control">
+				<legend>What state is the nappy in?</legend>
+				<label class="label cursor-pointer capitalize border rounded border-gray-200 px-2 mb-2">
+					<span class="label-text text-xl">Wet</span>
+					<input
+ 						type="checkbox"
+ 						name="wet"
+ 						x-model="selectedNappyStates"
+ 						:required="selectedNappyStates.length === 0"
+ 						value="wet"
+ 						class="checkbox"
+ 						if entry != nil {
+							checked?={ entry.NappyStateWet }
+						}
+					/>
+				</label>
+				<label class="label cursor-pointer capitalize border rounded border-gray-200 px-2 mb-2">
+					<span class="label-text text-xl">Dirty</span>
+					<input
+ 						type="checkbox"
+ 						name="_dirty"
+ 						x-model="selectedNappyStates"
+ 						:required="selectedNappyStates.length === 0"
+ 						value="dirty"
+ 						class="checkbox"
+ 						if entry != nil {
+							checked?={ entry.NappyStateWet }
+						}
+					/>
+				</label>
+				<template x-if="selectedNappyStates.includes('dirty')">
+					<label class="form-control">
+						<div class="label">
+							<span class="label-text capitalize">How dirty?</span>
+						</div>
+						<select class="select select-bordered border-gray-200 w-full text-xl" name="dirty" required>
+							if entry == nil {
+								<option disabled selected>Select one</option>
+							}
+							for i := 1; i <= 5; i++ {
+								<option
+ 									value={ strconv.Itoa(i) }
+ 									if entry != nil {
+										selected?={ entry.NappyStateDirty == i }
+									}
+								>
+									{ dirtyNappyStateText(i) }
+								</option>
+							}
+						</select>
+					</label>
+				</template>
+			</fieldset>
+		</template>
+	</div>
+}
+
+templ EditEntry(entry *db.Entry) {
+	<form hx-put={ "/entry/" + entry.Id } hx-replace-url="true" class="flex flex-col h-full px-4 justify-around">
+		<div class="max-w-screen-sm mx-auto w-full">
+			@NappyFieldsets(entry)
+		</div>
+		<div class="max-w-screen-sm mx-auto w-full">
+			@NotesFieldset(entry.Notes)
+		</div>
+		<div class="mx-auto grid grid-cols-1 md:grid-cols-2 gap-4 max-w-screen-sm">
+			<button class="btn btn-primary" type="submit">Submit changes</button>
+			<a class="btn btn-secondary" href={ templ.URL("/entry/all") }>Cancel changes</a>
+		</div>
+	</form>
+}
+
+templ NotesFieldset(notes string) {
+	<label class="form-control">
+		<div class="label">
+			<span class="label-text">Additional notes</span>
+		</div>
+		<textarea class="textarea textarea-primary" name="notes" placeholder="Something to add?" rows="5">
+			if len(notes) > 0 {
+				{ notes }
+			}
+		</textarea>
+	</label>
+}
+
+templ summaryCard(summary db.DailySummary) {
+	<div class="card max-w-screen-md w-full bg-neutral text-neutral-content shadow-md" id={ "summary-" + summary.Date.Format("2006-01-02") }>
+		<div class="card-body p-4 md:p-8">
+			<div class="grid" style="grid-template-columns: 1fr auto">
+				<div class="flex flex-col gap-2">
+					<div>
+						if summary.IsToday {
+							<span class="badge badge-secondary">Today</span>
+						}
+					</div>
+					<strong class="card-title text-lg text-primary">
+						<span class="text-xl">
+							{ summary.Date.Format("Monday, 02/01/2006") }
+						</span>
+					</strong>
+				</div>
+			</div>
+			<dl class="grid md:grid-cols-[1fr_auto_1fr] grid-cols-1 gap-4">
+				<div class="inline-grid grid-cols-[1fr_auto] gap-x-2 items-start">
+					<dt class="font-bold">Total entries:</dt>
+					<dd>
+						{ strconv.Itoa(summary.TotalEntries) }
+					</dd>
+					<div role="seperator" class="col-span-2 pb-3 mt-2 block border-t-2 border-gray-500"></div>
+					<dt class="pb-2">Wet nappys:</dt>
+					<dd class="pb-2">
+						{ strconv.Itoa(summary.WetCount) }
+					</dd>
+					<dt>Dirty nappys:</dt>
+					<dd>
+						<div>
+							{ strconv.Itoa(summary.DirtyTotalCount) }
+						</div>
+					</dd>
+					<div role="seperator" class="col-span-2 pb-3 mt-2 block border-t-2 border-gray-500"></div>
+					@dirtyNappyCountList(summary)
+					<div role="seperator" class="col-span-2 pb-3 mt-2 block border-t-2 border-gray-500"></div>
+					<dt>Both wet & dirty:</dt>
+					<dd>
+						{ strconv.Itoa(summary.WetAndDirtyCount) }
+					</dd>
+				</div>
+				<div role="seperator" class="block border border-gray-300"></div>
+				<div class="inline-grid grid-cols-[1fr_auto] gap-x-2 items-start">
+					<dt class="font-bold">Total feeds:</dt>
+					<dd>
+						{ strconv.Itoa(summary.TotalFeedsCount) }
+					</dd>
+					<div role="seperator" class="col-span-2 pb-3 mt-2 block border-t-2 border-gray-500"></div>
+					<dt>Total left feeds:</dt>
+					<dd>
+						{ strconv.Itoa(summary.LeftFeedsCount) }
+					</dd>
+					<dt>Left average time:</dt>
+					<dd>
+						{ summary.AvgLeftFeedDuration.String() }
+					</dd>
+					<dt>Total right feeds:</dt>
+					<dd>
+						{ strconv.Itoa(summary.RightFeedsCount) }
+					</dd>
+					<dt>Right average time:</dt>
+					<dd>
+						{ summary.AvgRightFeedDuration.String() }
+					</dd>
+					<dt>Longest feed:</dt>
+					<dd>
+						{ summary.MaxFeedDuration.String() }
+					</dd>
+					<dt>Shortest feed:</dt>
+					<dd>
+						{ summary.MinFeedDuration.String() }
+					</dd>
+				</div>
+			</dl>
+		</div>
+	</div>
+}
+
+templ dirtyNappyCountList(summary db.DailySummary) {
+	<dt>Streaked:</dt>
+	<dd>{ strconv.Itoa(summary.DirtyStreakCount) }</dd>
+	<dt>Stained:</dt>
+	<dd>{ strconv.Itoa(summary.DirtyStainedCount) }</dd>
+	<dt>Regular:</dt>
+	<dd>{ strconv.Itoa(summary.DirtyRegularCount) }</dd>
+	<dt>Heavy:</dt>
+	<dd>{ strconv.Itoa(summary.DirtyHeavyCount) }</dd>
+	<dt>Poonami:</dt>
+	<dd>{ strconv.Itoa(summary.DirtyPoonamiCount) }</dd>
+}
+
+templ SummariesPagination(summaries []db.DailySummary, nextPage int) {
+	for i, summary := range summaries {
+		<li
+ 			class="w-full flex items-center justify-center"
+ 			if i == len(summaries) - 1 {
+				hx-get={ "/daily?p=" + strconv.Itoa(nextPage) }
+				hx-select="#summaries > li"
+				hx-trigger="revealed"
+				hx-swap="afterend"
+			}
+		>
+			@summaryCard(summary)
+		</li>
+	}
+}
+
+templ EditEntryDialog(entry *db.Entry) {
+	<dialog id="edit-entry-modal" class="modal">
+		<div class="modal-box">
+			<form method="dialog">
+				<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+			</form>
+			<form
+ 				method="dialog"
+ 				hx-put={ "/entry/" + entry.Id }
+ 				hx-target={ "#entry-" + entry.Id }
+ 				hx-swap="outerHTML"
+ 				class="mx-auto max-w-screen-md px-4"
+ 				@submit="setTimeout(() => $event.target.closest('dialog').remove(), 10)"
+			>
+				@NappyFieldsets(entry)
+				<hr class="pb-2 mt-2"/>
+				@NotesFieldset(entry.Notes)
+				<div class="mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+					<button class="btn btn-primary md:col-span-2" type="submit">Submit changes</button>
+					<button class="btn btn-secondary" type="button" @click="$event.target.closest('dialog').close();setTimeout(() => $event.target.closest('dialog').remove(), 100)">
+						Cancel changes
+					</button>
+				</div>
+			</form>
+		</div>
+	</dialog>
+}
+
+templ EditEntryFeedDialog(entry *db.Entry, feed *db.Feed) {
+	<dialog id="edit-feed-modal" class="modal">
+		<div class="modal-box">
+			<form method="dialog">
+				<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+			</form>
+			<form
+ 				method="dialog"
+ 				hx-put={ "/entry/" + entry.Id + "/feed/" + strconv.Itoa(feed.Id) }
+ 				hx-target={ "#entry-" + entry.Id + "-feeds" }
+ 				hx-swap="innerHTML"
+ 				class="mx-auto max-w-screen-md px-4"
+ 				@submit="setTimeout(() => $event.target.closest('dialog').remove(), 10)"
+			>
+				<div class="grid gird-rows-2 items-stretch justify-center">
+					@SideFieldset("", feed.Side)
+					@Timer(feed, true)
+				</div>
+				<div class="mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+					<button class="btn btn-primary md:col-span-2" type="submit">Submit changes</button>
+					<button class="btn btn-secondary" type="button" @click="$event.target.closest('dialog').close();setTimeout(() => $event.target.closest('dialog').remove(), 100)">
+						Cancel changes
+					</button>
+				</div>
+			</form>
+		</div>
+	</dialog>
+}

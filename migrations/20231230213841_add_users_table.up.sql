@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS users (
+  id VARCHAR PRIMARY KEY,
+  token VARCHAR NOT NULL,
+  email VARCHAR NOT NULL,
+  name VARCHAR NOT NULL,
+  created_at DATETIME,
+  updated_at DATETIME
+);
